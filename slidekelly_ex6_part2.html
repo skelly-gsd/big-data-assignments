@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<title>Mapping with D3</title>
+	<script src="https://d3js.org/d3.v5.min.js" charset="utf-8"></script>
+	<script src="https://d3js.org/d3-scale-chromatic.v1.min.js"></script>
+    <script src="https://d3js.org/topojson.v2.min.js"></script>
+
+    <style>
+
+    	p {
+    		font-family: "Arial";
+    		font-weight: bold;
+    		font-size: 12px;
+    		vertical-align: middle;
+    		margin-top: 12px;
+    	}
+
+    	#tooltip.hidden {
+    		display: none;
+    	}
+
+    	#tooltip {
+    		position: absolute;
+   			width: 120px;
+   			border-radius: 10px;
+   			background-color: white;
+   			border: solid gray 1px;
+   			z-index:10;
+   			text-align: center;
+   			padding-left: 4px;
+   			padding-right: 4px;
+   			opacity: 0.6;
+    	}
+
+    	.caption {
+    		font-family: "Arial";
+    		font-size: 10px;
+    		overflow-wrap: break-word;
+    	}
+
+    	.ticks {
+    		font: 2px "Arial";
+    	}
+
+    </style>
+
+</head>
+<body>
+	
+	<div id="tooltip" class="hidden">
+		<p><span id="value">100</span></p>
+	</div>
+
+	<div id="main"></div>
+
+	<script type="text/javascript">
+		// Our D3 code will go here.
+		var bosneighborhoodsurl = "https://gist.githubusercontent.com/cesandoval/09b2e39263c748fbcb84b927cecc7c46/raw/ab71d3638efd2545ec99c2651c6f2ddcea9d2a07/boston.json"
+
+		var bos311url = "https://raw.githubusercontent.com/brookefzy/BigData2020/master/pset6/boston_311.csv"
+
+		var width = 1200;
+		var height = 900;
+
+		var svg = d3.select("body").append("svg")
+			.attr("width", width)
+			.attr("height", height);
+
+		var albersProjection = d3.geoAlbers()
+			.scale(250000)
+            .rotate([71.057, 0])
+            .center([0, 42.313])
+            .translate([width/2, height/2])
+
+		var geoPath = d3.geoPath()
+			.projection(albersProjection)
+
+		var color = d3.scaleQuantize()
+			.domain([0, 5.69])
+			.range(d3.schemePurples[9]);
+
+		var x = d3.scaleLinear()
+           .domain([1, 10])
+           .rangeRound([600, 860]);
+
+       	var g = svg.append("g")
+           .attr("transform", "scale(1.8), translate(-500,60)");
+
+		var callsmap = d3.map();
+
+		var callsmap_per = d3.map();
+
+		var promises = [d3.json(bosneighborhoodsurl), d3.csv(bos311url, function(d) { 
+			d['twitter_per']=(+d.twitter+1)/+d['tot_count'] 
+			d.twitter=+d.twitter+1 
+			callsmap.set(d.Name, +d.twitter);
+			callsmap_per.set(d.Name, +d['twitter_per'])
+		})]
+
+		Promise.all(promises).then(ready)
+
+		function ready([bos]) {
+			console.log(Object.values(callsmap_per))
+			svg.append("g")
+				.selectAll("path")
+				.data(topojson.feature(bos, bos.objects.boston_neigh).features)
+				.enter()
+				.append("path")
+				.attr("fill", function(d) {
+					console.log("d: ",callsmap)
+					return color(d.twitter = Math.log(callsmap.get(d.properties.Name))) })
+				.attr("d", geoPath)
+				.on("mouseover", function(d) {
+					d3.select("#tooltip")
+					.style("left", d3.event.pageX + "px")
+					.style("top", d3.event.pageY + "px")
+					.select("#value")
+					.html("<p>" + d.properties.Name + ": " + (callsmap_per.get(d.properties.Name)*100).toFixed(2) + "%<p>")
+					d3.select("#tooltip").classed("hidden", false);
+				})
+				.on("mouseout", function(d) {
+					d3.select("#tooltip").classed("hidden", true);
+				})
+				console.log(bos.objects.boston_neigh)
+			};
+
+		g.selectAll("rect")
+           .data(color.range().map(function(d) {
+               d = color.invertExtent(d);
+               if (d[0] == null) d[0] = x.domain()[0];
+               if (d[1] == null) d[1] = x.domain()[1];
+               return d;
+           }))
+           .enter().append("rect")
+           .attr("height", 10)
+           .attr("x", function(d) { return x(d[0]); })
+           .attr("width", function(d) { return x(d[1]) - x(d[0]); })
+           .attr("fill", function(d) { return color(d[0]); });
+ 
+       	g.append("text")
+           .attr("class", "caption")
+           .attr("x", x.range()[0] + 50)
+           .attr("y", -20)
+           .attr("fill", "#000")
+           .attr("font-weight", "bold")
+           .text("Tweets Per Neighborhood as");
+
+        g.append("text")
+           .attr("class", "caption")
+           .attr("x", x.range()[0] + 50)
+           .attr("y", -8)
+           .attr("fill", "#000")
+           .attr("font-weight", "bold")
+           .text("% of Total 311 Calls (log scale)");
+
+        g.call(d3.axisBottom(x)
+       		.tickSize(13)
+       		.tickFormat(function(x, i) { return i ? x : x + "%"; })
+       		.tickValues(color.domain()))
+       		.select(".domain")
+       		.remove();
+
+	</script>	
+</body>
+</html>
